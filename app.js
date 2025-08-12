@@ -151,6 +151,7 @@ function switchToProfile(name) {
   updateCurrentPlayerPill();
   applyActiveProfileTheme();
   refreshTopRecords();
+  updateBadgesTray();
   startNewGame();
 }
 
@@ -363,13 +364,17 @@ function updateBadgesTray() {
   badgesTrayEl.innerHTML = '';
   levels.forEach((lvl) => {
     const d = document.createElement('div');
-    d.className = 'badge';
+    d.className = `badge badge--level-${lvl}`;
+    const icon = document.createElement('span');
+    icon.className = 'icon';
+    icon.textContent = '🏆';
     const lv = document.createElement('span');
     lv.className = 'level';
     lv.textContent = `${lvl}×`;
     const label = document.createElement('span');
     label.className = 'label';
     label.textContent = lvl === 1 ? 'All Facts Mastered' : `All Facts ${lvl}x`;
+    d.appendChild(icon);
     d.appendChild(lv);
     d.appendChild(label);
     badgesTrayEl.appendChild(d);
@@ -573,6 +578,9 @@ function openModal(modalEl, variant) {
   if (modalEl === feedbackModalEl) {
     isFeedbackOpen = true;
     setTimeout(() => { try { nextBtnEl.focus(); } catch (_) {} }, 0);
+  }
+  if (typeof achievementModalEl !== 'undefined' && modalEl === achievementModalEl) {
+    setTimeout(() => { try { achievementOkBtnEl.focus(); } catch (_) {} }, 0);
   }
 }
 
@@ -888,6 +896,16 @@ function init() {
       handleNext();
     }
   });
+
+  // Allow Enter/Space to dismiss achievement modal
+  if (achievementModalEl) {
+    achievementModalEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        closeModal(achievementModalEl);
+      }
+    });
+  }
 
   playAgainBtnEl.addEventListener('click', () => {
     closeModal(endModalEl);

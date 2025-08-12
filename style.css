@@ -453,34 +453,52 @@ body {
   transform: translateY(-50%);
   display: none;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   z-index: 50;
 }
 
 .badges-tray.active { display: flex; }
 
 .badge {
-  background: var(--card);
-  border: 2px solid #e9edf3;
-  box-shadow: var(--shadow);
-  border-radius: 12px;
-  padding: 8px 10px;
+  background: linear-gradient(135deg, #fff, #f7f9ff);
+  border: 2px solid #e0e6f3;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+  border-radius: 14px;
+  padding: 10px 12px;
   font-weight: 800;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  min-width: 210px;
+}
+
+.badge .icon {
+  font-size: 20px;
 }
 
 .badge .level {
   background: var(--primary);
   color: white;
-  border-radius: 8px;
-  padding: 4px 8px;
+  border-radius: 10px;
+  padding: 4px 10px;
   font-size: 12px;
 }
 
 .badge .label {
   color: var(--text);
+}
+
+/* Level-specific subtle borders */
+.badge--level-1 { border-color: #e6d38a; }
+.badge--level-2 { border-color: #c9dd8a; }
+.badge--level-3 { border-color: #8ad0dd; }
+.badge--level-4 { border-color: #c98add; }
+
+/* Achievement modal extra pop */
+.modal--achievement .achievement {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #fff7e6, #fff);
 }
 
 /* Achievement modal burst */
