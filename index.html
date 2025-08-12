@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Math Magic: Multiplication Flashcards</title>
+    <meta name="description" content="Fun multiplication flashcards for kids with streaks, stats, and friendly encouragement." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="app__header">
+        <div class="branding">
+          <div class="logo" aria-hidden="true">✨</div>
+          <div class="title">
+            <h1>Math Magic</h1>
+            <p class="subtitle">Multiplication Flashcards (0–10)</p>
+          </div>
+        </div>
+
+        <div class="stats" role="region" aria-label="Live game statistics">
+          <div class="stat">
+            <div class="stat__label">Streak</div>
+            <div class="stat__value" id="stat-streak">0</div>
+            <div class="stat__meta">
+              <span>Best: <strong id="best-streak">0</strong></span>
+              <span class="divider">|</span>
+              <span>Prev: <strong id="prev-streak">0</strong></span>
+            </div>
+          </div>
+          <div class="stat">
+            <div class="stat__label">Correct</div>
+            <div class="stat__value" id="stat-percent">0%</div>
+            <div class="stat__meta">
+              <span>Best: <strong id="best-percent">0%</strong></span>
+              <span class="divider">|</span>
+              <span>Prev: <strong id="prev-percent">0%</strong></span>
+            </div>
+          </div>
+          <div class="stat">
+            <div class="stat__label">Avg Time</div>
+            <div class="stat__value" id="stat-avgtime">0s</div>
+            <div class="stat__meta">
+              <span>Best: <strong id="best-avgtime">—</strong></span>
+              <span class="divider">|</span>
+              <span>Prev: <strong id="prev-avgtime">—</strong></span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="game" role="main">
+        <section class="card" aria-live="polite" aria-atomic="true">
+          <div class="problem">
+            <span class="factor" id="factor-a">0</span>
+            <span class="times" aria-hidden="true">×</span>
+            <span class="factor" id="factor-b">0</span>
+            <span class="equals" aria-hidden="true">=</span>
+          </div>
+          <form id="answer-form" autocomplete="off">
+            <input
+              id="answer-input"
+              class="answer-input"
+              type="number"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="Your answer"
+              aria-label="Enter your answer"
+              required
+            />
+            <button type="submit" class="btn btn--primary" id="submit-btn">Check</button>
+          </form>
+          <div class="progress" id="progress">Question 0 / 20</div>
+        </section>
+
+        <section class="tips" id="tips">
+          You got this! Type your answer and press Enter. 🌟
+        </section>
+      </main>
+
+      <footer class="app__footer">
+        Keep shining, math star! ✨ Every try makes you stronger.
+      </footer>
+    </div>
+
+    <!-- Feedback Modal -->
+    <div class="modal" id="feedback-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
+      <div class="modal__dialog">
+        <div class="modal__content">
+          <h2 id="feedback-title">Nice!</h2>
+          <p id="feedback-message">You did it!</p>
+          <button class="btn btn--primary" id="next-btn" autofocus>Next</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- End Game Modal -->
+    <div class="modal" id="end-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="end-title">
+      <div class="modal__dialog">
+        <div class="modal__content">
+          <h2 id="end-title">Great Game! 🎉</h2>
+          <div class="summary" id="summary">
+            <!-- populated by JS -->
+          </div>
+          <div class="review" id="review">
+            <h3>Study these:</h3>
+            <ul id="missed-list"></ul>
+          </div>
+          <div class="modal__actions">
+            <button class="btn" id="close-report-btn">Close</button>
+            <button class="btn btn--primary" id="play-again-btn">Play Again</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
