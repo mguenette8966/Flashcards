@@ -68,6 +68,7 @@ function createEmptyProfile(name) {
     theme: 'default',
     factStatsByKey: {},
     cycleQueue: [],
+    unmasteredQueue: ALL_FACTS.map(({ a, b }) => factKey(a, b)),
     lastMissedKeys: [],
     bestRecords: { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null },
     previousGame: { percent: 0, avgTimeSec: null, maxStreak: 0 },
@@ -147,6 +148,7 @@ let cycleQueue = [];
 let lastMissedKeys = [];
 let bestRecords = { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null };
 let previousGame = { percent: 0, avgTimeSec: null, maxStreak: 0 };
+let unmasteredQueue = [];
 
 function loadActiveProfileData() {
   const profile = getActiveProfile();
@@ -156,6 +158,18 @@ function loadActiveProfileData() {
   lastMissedKeys = profile.lastMissedKeys || [];
   bestRecords = profile.bestRecords || { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null };
   previousGame = profile.previousGame || { percent: 0, avgTimeSec: null, maxStreak: 0 };
+  // Build unmasteredQueue if missing or stale
+  if (!Array.isArray(profile.unmasteredQueue)) {
+    profile.unmasteredQueue = ALL_FACTS
+      .map(({ a, b }) => factKey(a, b))
+      .filter((k) => !(factStatsByKey[k] && factStatsByKey[k].correct > 0));
+  }
+  unmasteredQueue = profile.unmasteredQueue;
+  // Ensure cycleQueue contains all mastered facts at least once
+  const masteredKeys = ALL_FACTS
+    .map(({ a, b }) => factKey(a, b))
+    .filter((k) => factStatsByKey[k] && factStatsByKey[k].correct > 0);
+  masteredKeys.forEach((k) => { if (!cycleQueue.includes(k)) cycleQueue.push(k); });
 }
 
 function saveActiveProfileData() {
@@ -166,21 +180,23 @@ function saveActiveProfileData() {
   profile.lastMissedKeys = lastMissedKeys;
   profile.bestRecords = bestRecords;
   profile.previousGame = previousGame;
+  profile.unmasteredQueue = unmasteredQueue;
   profile.lastPlayedMs = nowMs();
   saveProfiles();
 }
 
 // Session state
 const GAME_LENGTH = 20;
-let askedCount = 0;
+let askedCount = 0; // attempts
 let correctCount = 0;
 let currentStreak = 0;
 let maxStreak = 0;
 let totalAnswerTimeMs = 0;
 let currentQuestion = null; // { a, b, key }
 let questionStartTimeMs = null;
-const askedThisGame = new Set();
+const askedThisGame = new Set(); // unique keys this game
 const missedThisGame = new Set();
+const retryQueue = []; // keys to immediately retry until correct
 
 // Modal state
 let modalOpenCount = 0;
@@ -443,7 +459,7 @@ function updateLiveStats() {
   setText(streakEl, `${currentStreak}`);
   setText(percentEl, formatPercent(percent));
   setText(avgTimeEl, `${avgTimeSec}s`);
-  const displayCount = Math.min(askedCount + (currentQuestion ? 1 : 0), GAME_LENGTH);
+  const displayCount = Math.min(askedThisGame.size + (currentQuestion ? 1 : 0), GAME_LENGTH);
   setText(progressEl, `Question ${displayCount} / ${GAME_LENGTH}`);
 }
 
@@ -463,24 +479,37 @@ function updateCurrentPlayerPill() {
 }
 
 function pickNextQuestionKey() {
-  if (askedCount >= GAME_LENGTH) return null;
+  // 0) Retry incorrect immediately until correct
+  if (retryQueue.length > 0) {
+    return retryQueue[0];
+  }
 
-  // 1) Prioritize last missed facts
+  // Stop after 20 unique questions in this game
+  if (askedThisGame.size >= GAME_LENGTH) return null;
+
+  // 1) Prioritize last missed from previous game (unique only)
   for (const key of lastMissedKeys) {
     if (!askedThisGame.has(key)) return key;
   }
 
-  // 2) Facts never answered correctly
-  const neverMastered = ALL_FACTS
-    .map(({ a, b }) => factKey(a, b))
-    .filter((k) => !askedThisGame.has(k) && !(factStatsByKey[k] && factStatsByKey[k].correct > 0));
-  if (neverMastered.length > 0) {
-    return neverMastered[Math.floor(Math.random() * neverMastered.length)];
+  // 2) Take next unmastered fact without repeating this game
+  if (unmasteredQueue.length > 0) {
+    // rotate until we find one not used this game, or give up after full pass
+    const len = unmasteredQueue.length;
+    for (let i = 0; i < len; i += 1) {
+      const k = unmasteredQueue[0];
+      unmasteredQueue.push(unmasteredQueue.shift());
+      if (!askedThisGame.has(k)) {
+        saveActiveProfileData();
+        return k;
+      }
+    }
   }
 
-  // 3) Rotate through mastered facts via cycle queue
+  // 3) Rotate through mastered facts
   if (cycleQueue.length > 0) {
-    for (let i = 0; i < cycleQueue.length; i += 1) {
+    const len = cycleQueue.length;
+    for (let i = 0; i < len; i += 1) {
       const k = cycleQueue[0];
       cycleQueue.push(cycleQueue.shift());
       if (!askedThisGame.has(k)) {
@@ -490,7 +519,7 @@ function pickNextQuestionKey() {
     }
   }
 
-  // 4) Fallback to any fact not used this game
+  // 4) Fallback any remaining not asked this game
   const remaining = ALL_FACTS
     .map(({ a, b }) => factKey(a, b))
     .filter((k) => !askedThisGame.has(k));
@@ -570,9 +599,12 @@ function handleSubmitAnswer(event) {
   const correctAnswer = a * b;
   const isCorrect = userValue === correctAnswer;
 
-  // Update stats
+  // Update attempt stats
   askedCount += 1;
-  askedThisGame.add(key);
+
+  // Track unique per game on first attempt only
+  if (!askedThisGame.has(key)) askedThisGame.add(key);
+
   const stats = factStatsByKey[key] || { correct: 0, wrong: 0, lastSeenMs: 0 };
   stats.lastSeenMs = nowMs();
   if (isCorrect) {
@@ -580,20 +612,30 @@ function handleSubmitAnswer(event) {
     correctCount += 1;
     currentStreak += 1;
     if (currentStreak > maxStreak) maxStreak = currentStreak;
+
+    // If this was being retried, remove from retryQueue
+    if (retryQueue[0] === key) retryQueue.shift();
+
+    // If first time mastered, move from unmastered to mastered queue
+    if (stats.correct === 1) {
+      // remove from unmasteredQueue
+      const idx = unmasteredQueue.indexOf(key);
+      if (idx !== -1) unmasteredQueue.splice(idx, 1);
+      // add to mastered cycle if not present
+      if (!cycleQueue.includes(key)) cycleQueue.push(key);
+    }
   } else {
     stats.wrong += 1;
     currentStreak = 0;
     missedThisGame.add(key);
+    // Queue immediate retry if not already queued
+    if (retryQueue[0] !== key) {
+      // Put at front to retry next
+      retryQueue.unshift(key);
+    }
   }
   factStatsByKey[key] = stats;
   saveActiveProfileData();
-
-  if (isCorrect && !(stats.correct > 1)) {
-    if (!cycleQueue.includes(key)) {
-      cycleQueue.push(key);
-      saveActiveProfileData();
-    }
-  }
 
   // Feedback modal and sounds
   if (isCorrect) {
@@ -615,7 +657,8 @@ function handleSubmitAnswer(event) {
 
   updateLiveStats();
 
-  if (askedCount >= GAME_LENGTH) {
+  // Decide next action: end only if 20 unique reached and no retries pending
+  if (askedThisGame.size >= GAME_LENGTH && retryQueue.length === 0) {
     nextBtnEl.dataset.nextAction = 'end';
   } else {
     nextBtnEl.dataset.nextAction = 'question';
@@ -653,7 +696,6 @@ function handleNext() {
 function askNextQuestion() {
   const key = pickNextQuestionKey();
   if (!key) {
-    // No more questions available; end game
     showEndSummary();
     return;
   }
@@ -723,6 +765,7 @@ function resetGame() {
   questionStartTimeMs = null;
   askedThisGame.clear();
   missedThisGame.clear();
+  retryQueue.length = 0;
   updateLiveStats();
   refreshTopRecords();
 }
