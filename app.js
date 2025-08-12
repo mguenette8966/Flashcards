@@ -628,13 +628,15 @@ function handleSubmitAnswer(event) {
     checkAndAwardAchievements();
   }
 
-  // If this was the final unique question, go straight to the end report
+  // Always show feedback; decide next action via the Next button
   if (askedThisGame.size >= GAME_LENGTH) {
-    showEndSummary();
-    return;
+    nextBtnEl.dataset.nextAction = 'end';
+    nextBtnEl.textContent = 'See Report';
+  } else {
+    nextBtnEl.dataset.nextAction = 'question';
+    nextBtnEl.textContent = 'Next';
   }
 
-  // Otherwise, show feedback for this question
   if (isCorrect) {
     feedbackTitleEl.textContent = randomPraise();
     feedbackMsgEl.textContent = `${a} × ${b} = ${correctAnswer}. High five! ✋`;
@@ -646,9 +648,6 @@ function handleSubmitAnswer(event) {
     openModal(feedbackModalEl, 'modal--error');
     playError();
   }
-
-  nextBtnEl.dataset.nextAction = 'question';
-  nextBtnEl.textContent = 'Next';
 }
 
 const PRAISE = [
@@ -673,9 +672,9 @@ function handleNext() {
   const action = nextBtnEl.dataset.nextAction || 'question';
   if (action === 'end') {
     showEndSummary();
-  } else {
-    askNextQuestion();
+    return;
   }
+  askNextQuestion();
   playNav();
 }
 
@@ -881,6 +880,9 @@ function init() {
     switchToProfile(name);
     updateBadgesTray();
     closeModal(profileModalEl);
+    // Ensure first question loads immediately for the chosen profile
+    resetGame();
+    askNextQuestion();
   });
 
   profileNameInputEl.addEventListener('keydown', (e) => {
@@ -891,11 +893,11 @@ function init() {
   });
 
   leaderboardBtnEl.addEventListener('click', () => {
-    // Default metric percent
     buildLeaderboardRows('percent');
     openModal(leaderboardModalEl);
     playNav();
   });
+
   const lbControls = document.getElementById('leaderboard-controls');
   lbControls.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-metric]');
