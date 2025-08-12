@@ -643,8 +643,10 @@ function handleSubmitAnswer(event) {
   // Decide next action
   if (askedThisGame.size >= GAME_LENGTH) {
     nextBtnEl.dataset.nextAction = 'end';
+    nextBtnEl.textContent = 'See Report';
   } else {
     nextBtnEl.dataset.nextAction = 'question';
+    nextBtnEl.textContent = 'Next';
   }
 }
 
@@ -705,6 +707,9 @@ function showEndSummary() {
   lastMissedKeys = Array.from(missedThisGame).slice(0, 10);
 
   saveActiveProfileData();
+
+  // Update header stats immediately to reflect games increment
+  updateLiveStats();
 
   // Build summary content
   summaryEl.innerHTML = '';
