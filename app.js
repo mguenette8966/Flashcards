@@ -6,7 +6,11 @@ const STORAGE_KEYS = {
   cycleQueue: 'mf_cycle_queue_v1',
   lastMissed: 'mf_last_missed_v1',
   best: 'mf_best_v1',
-  previous: 'mf_previous_v1'
+  previous: 'mf_previous_v1',
+  // Profiles
+  profiles: 'mf_profiles_v1',
+  currentProfile: 'mf_current_profile_v1',
+  recentProfiles: 'mf_recent_profiles_v1'
 };
 
 // Build all multiplication facts (0-10)
@@ -53,23 +57,114 @@ function nowMs() {
   return Date.now();
 }
 
-// Persistent stores
-let factStatsByKey = loadJSON(STORAGE_KEYS.factStats, {}); // { [key]: { correct, wrong, lastSeenMs } }
-let cycleQueue = loadJSON(STORAGE_KEYS.cycleQueue, []); // array of keys for rotation of mastered facts
-let lastMissedKeys = loadJSON(STORAGE_KEYS.lastMissed, []); // array of keys from last game that were missed
-let bestRecords = loadJSON(STORAGE_KEYS.best, { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null });
-let previousGame = loadJSON(STORAGE_KEYS.previous, { percent: 0, avgTimeSec: null, maxStreak: 0 });
+// Profiles persistence
+let profilesByName = loadJSON(STORAGE_KEYS.profiles, {}); // { [name]: Profile }
+let currentProfileName = loadJSON(STORAGE_KEYS.currentProfile, null);
+let recentProfiles = loadJSON(STORAGE_KEYS.recentProfiles, []);
 
-function isMastered(key) {
-  const s = factStatsByKey[key];
-  return !!s && s.correct > 0;
+function createEmptyProfile(name) {
+  return {
+    name,
+    factStatsByKey: {},
+    cycleQueue: [],
+    lastMissedKeys: [],
+    bestRecords: { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null },
+    previousGame: { percent: 0, avgTimeSec: null, maxStreak: 0 },
+    createdAtMs: nowMs(),
+    lastPlayedMs: nowMs()
+  };
 }
 
-function updateCycleQueueForMastered(key) {
-  if (!cycleQueue.includes(key)) {
-    cycleQueue.push(key);
-    saveJSON(STORAGE_KEYS.cycleQueue, cycleQueue);
+function saveProfiles() {
+  saveJSON(STORAGE_KEYS.profiles, profilesByName);
+}
+
+function setCurrentProfile(name) {
+  currentProfileName = name;
+  saveJSON(STORAGE_KEYS.currentProfile, currentProfileName);
+}
+
+function pushRecentProfile(name) {
+  const trimmed = name.trim();
+  const without = recentProfiles.filter((n) => n !== trimmed);
+  without.unshift(trimmed);
+  recentProfiles = without.slice(0, 10);
+  saveJSON(STORAGE_KEYS.recentProfiles, recentProfiles);
+}
+
+function maybeMigrateLegacyData() {
+  // If we already have profiles, skip
+  if (Object.keys(profilesByName).length > 0) return;
+  // Check legacy keys
+  const legacyFactStats = loadJSON(STORAGE_KEYS.factStats, null);
+  const legacyCycle = loadJSON(STORAGE_KEYS.cycleQueue, null);
+  const legacyMissed = loadJSON(STORAGE_KEYS.lastMissed, null);
+  const legacyBest = loadJSON(STORAGE_KEYS.best, null);
+  const legacyPrev = loadJSON(STORAGE_KEYS.previous, null);
+  if (
+    legacyFactStats || legacyCycle || legacyMissed || legacyBest || legacyPrev
+  ) {
+    const name = 'Player';
+    const profile = createEmptyProfile(name);
+    if (legacyFactStats) profile.factStatsByKey = legacyFactStats;
+    if (legacyCycle) profile.cycleQueue = legacyCycle;
+    if (legacyMissed) profile.lastMissedKeys = legacyMissed;
+    if (legacyBest) profile.bestRecords = legacyBest;
+    if (legacyPrev) profile.previousGame = legacyPrev;
+    profilesByName[name] = profile;
+    saveProfiles();
+    setCurrentProfile(name);
+    pushRecentProfile(name);
   }
+}
+
+function getActiveProfile() {
+  if (!currentProfileName || !profilesByName[currentProfileName]) return null;
+  return profilesByName[currentProfileName];
+}
+
+function switchToProfile(name) {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  if (!profilesByName[trimmed]) {
+    profilesByName[trimmed] = createEmptyProfile(trimmed);
+    saveProfiles();
+  }
+  setCurrentProfile(trimmed);
+  pushRecentProfile(trimmed);
+  loadActiveProfileData();
+  updateCurrentPlayerPill();
+  refreshTopRecords();
+  startNewGame();
+}
+
+// Load active profile data into module-level stores
+let factStatsByKey = {};
+let cycleQueue = [];
+let lastMissedKeys = [];
+let bestRecords = { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null };
+let previousGame = { percent: 0, avgTimeSec: null, maxStreak: 0 };
+
+function loadActiveProfileData() {
+  const profile = getActiveProfile();
+  if (!profile) return;
+  factStatsByKey = profile.factStatsByKey || {};
+  cycleQueue = profile.cycleQueue || [];
+  lastMissedKeys = profile.lastMissedKeys || [];
+  bestRecords = profile.bestRecords || { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null };
+  previousGame = profile.previousGame || { percent: 0, avgTimeSec: null, maxStreak: 0 };
+}
+
+function saveActiveProfileData() {
+  const profile = getActiveProfile();
+  if (!profile) return;
+  profile.factStatsByKey = factStatsByKey;
+  profile.cycleQueue = cycleQueue;
+  profile.lastMissedKeys = lastMissedKeys;
+  profile.bestRecords = bestRecords;
+  profile.previousGame = previousGame;
+  profile.lastPlayedMs = nowMs();
+  saveProfiles();
 }
 
 // Session state
@@ -83,6 +178,10 @@ let currentQuestion = null; // { a, b, key }
 let questionStartTimeMs = null;
 const askedThisGame = new Set();
 const missedThisGame = new Set();
+
+// Modal state
+let modalOpenCount = 0;
+let isFeedbackOpen = false;
 
 // Elements
 const factorAEl = document.getElementById('factor-a');
@@ -116,6 +215,22 @@ const prevStreakEl = document.getElementById('prev-streak');
 const prevPercentEl = document.getElementById('prev-percent');
 const prevAvgTimeEl = document.getElementById('prev-avgtime');
 
+// Header actions
+const changePlayerBtnEl = document.getElementById('change-player-btn');
+const leaderboardBtnEl = document.getElementById('leaderboard-btn');
+const currentPlayerEl = document.getElementById('current-player');
+
+// Profile modal
+const profileModalEl = document.getElementById('profile-modal');
+const profileNameInputEl = document.getElementById('profile-name-input');
+const profileStartBtnEl = document.getElementById('profile-start-btn');
+const recentProfilesEl = document.getElementById('recent-profiles');
+
+// Leaderboard modal
+const leaderboardModalEl = document.getElementById('leaderboard-modal');
+const leaderboardTableEl = document.getElementById('leaderboard-table');
+const closeLeaderboardBtnEl = document.getElementById('close-leaderboard-btn');
+
 function setText(el, text) { el.textContent = text; }
 
 function formatPercent(n) {
@@ -143,6 +258,11 @@ function refreshTopRecords() {
   setText(prevAvgTimeEl, (previousGame.avgTimeSec != null) ? `${previousGame.avgTimeSec}s` : '—');
 }
 
+function updateCurrentPlayerPill() {
+  const name = currentProfileName || '—';
+  setText(currentPlayerEl, `Player: ${name}`);
+}
+
 function pickNextQuestionKey() {
   if (askedCount >= GAME_LENGTH) return null;
 
@@ -154,25 +274,24 @@ function pickNextQuestionKey() {
   // 2) Facts never answered correctly
   const neverMastered = ALL_FACTS
     .map(({ a, b }) => factKey(a, b))
-    .filter((k) => !askedThisGame.has(k) && !isMastered(k));
+    .filter((k) => !askedThisGame.has(k) && !(factStatsByKey[k] && factStatsByKey[k].correct > 0));
   if (neverMastered.length > 0) {
     return neverMastered[Math.floor(Math.random() * neverMastered.length)];
   }
 
   // 3) Rotate through mastered facts via cycle queue
   if (cycleQueue.length > 0) {
-    // Find the next in queue that we have not used this game
     for (let i = 0; i < cycleQueue.length; i += 1) {
       const k = cycleQueue[0];
-      cycleQueue.push(cycleQueue.shift()); // rotate
+      cycleQueue.push(cycleQueue.shift());
       if (!askedThisGame.has(k)) {
-        saveJSON(STORAGE_KEYS.cycleQueue, cycleQueue);
+        saveActiveProfileData();
         return k;
       }
     }
   }
 
-  // 4) As a fallback (should be rare), sample any fact not used this game
+  // 4) Fallback to any fact not used this game
   const remaining = ALL_FACTS
     .map(({ a, b }) => factKey(a, b))
     .filter((k) => !askedThisGame.has(k));
@@ -210,14 +329,32 @@ function openModal(modalEl, variant) {
   modalEl.setAttribute('aria-hidden', 'false');
   modalEl.classList.remove('modal--success', 'modal--error');
   if (variant) modalEl.classList.add(variant);
+  modalOpenCount += 1;
+  // Disable form while modal is open to avoid background submit
+  answerInputEl.blur();
+  submitBtnEl.disabled = true;
+  answerInputEl.disabled = true;
+  if (modalEl === feedbackModalEl) {
+    isFeedbackOpen = true;
+    setTimeout(() => { try { nextBtnEl.focus(); } catch (_) {} }, 0);
+  }
 }
 
 function closeModal(modalEl) {
   modalEl.setAttribute('aria-hidden', 'true');
+  modalOpenCount = Math.max(0, modalOpenCount - 1);
+  if (modalOpenCount === 0) {
+    submitBtnEl.disabled = false;
+    answerInputEl.disabled = false;
+  }
+  if (modalEl === feedbackModalEl) {
+    isFeedbackOpen = false;
+  }
 }
 
 function handleSubmitAnswer(event) {
   event.preventDefault();
+  if (isFeedbackOpen || modalOpenCount > 0) return; // prevent double submit
   if (!currentQuestion) return;
   const raw = answerInputEl.value.trim();
   if (raw === '') {
@@ -250,10 +387,14 @@ function handleSubmitAnswer(event) {
     missedThisGame.add(key);
   }
   factStatsByKey[key] = stats;
-  saveJSON(STORAGE_KEYS.factStats, factStatsByKey);
+  saveActiveProfileData();
 
-  if (isCorrect && !isMastered(key)) {
-    updateCycleQueueForMastered(key);
+  if (isCorrect && !(stats.correct > 1)) {
+    // Just mastered for the first time
+    if (!cycleQueue.includes(key)) {
+      cycleQueue.push(key);
+      saveActiveProfileData();
+    }
   }
 
   // Feedback modal
@@ -326,15 +467,13 @@ function showEndSummary() {
   if (avgTimeSec > 0 && (bestRecords.bestAvgTimeSec == null || avgTimeSec < bestRecords.bestAvgTimeSec)) {
     bestRecords.bestAvgTimeSec = avgTimeSec;
   }
-  saveJSON(STORAGE_KEYS.best, bestRecords);
-
-  // Save previous game
+  // Save previous game to profile as well
   previousGame = { percent, avgTimeSec, maxStreak };
-  saveJSON(STORAGE_KEYS.previous, previousGame);
+  saveActiveProfileData();
 
   // Save last missed for next run prioritization
   lastMissedKeys = Array.from(missedThisGame);
-  saveJSON(STORAGE_KEYS.lastMissed, lastMissedKeys);
+  saveActiveProfileData();
 
   // Build summary content
   summaryEl.innerHTML = '';
@@ -388,17 +527,85 @@ function startNewGame() {
   askNextQuestion();
 }
 
+function populateRecentProfilesChips() {
+  if (!recentProfilesEl) return;
+  recentProfilesEl.innerHTML = '';
+  recentProfiles.forEach((name) => {
+    const d = document.createElement('div');
+    d.className = 'chip';
+    d.textContent = name;
+    d.addEventListener('click', () => {
+      switchToProfile(name);
+      closeModal(profileModalEl);
+    });
+    recentProfilesEl.appendChild(d);
+  });
+}
+
+function openProfileModal() {
+  openModal(profileModalEl);
+  populateRecentProfilesChips();
+  setTimeout(() => { try { profileNameInputEl.focus(); } catch (_) {} }, 0);
+}
+
+function buildLeaderboardRows() {
+  const tbody = leaderboardTableEl.querySelector('tbody');
+  tbody.innerHTML = '';
+  const rows = Object.values(profilesByName).map((p) => ({
+    name: p.name,
+    best: p.bestRecords || { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null }
+  }));
+  rows.sort((a, b) => {
+    const ap = a.best.bestPercent || 0;
+    const bp = b.best.bestPercent || 0;
+    if (bp !== ap) return bp - ap;
+    const as = a.best.bestStreak || 0;
+    const bs = b.best.bestStreak || 0;
+    if (bs !== as) return bs - as;
+    const at = a.best.bestAvgTimeSec == null ? Infinity : a.best.bestAvgTimeSec;
+    const bt = b.best.bestAvgTimeSec == null ? Infinity : b.best.bestAvgTimeSec;
+    return at - bt;
+  });
+  rows.forEach(({ name, best }) => {
+    const tr = document.createElement('tr');
+    const tdName = document.createElement('td');
+    const tdStreak = document.createElement('td');
+    const tdPercent = document.createElement('td');
+    const tdAvg = document.createElement('td');
+    tdName.textContent = name;
+    tdStreak.textContent = `${best.bestStreak ?? 0}`;
+    tdPercent.textContent = `${Math.round(best.bestPercent ?? 0)}%`;
+    tdAvg.textContent = best.bestAvgTimeSec != null ? `${best.bestAvgTimeSec}s` : '—';
+    tr.appendChild(tdName);
+    tr.appendChild(tdStreak);
+    tr.appendChild(tdPercent);
+    tr.appendChild(tdAvg);
+    tbody.appendChild(tr);
+  });
+}
+
 function init() {
+  maybeMigrateLegacyData();
+  updateCurrentPlayerPill();
   refreshTopRecords();
   updateLiveStats();
-  askNextQuestion();
+
+  // If no active profile, ask first; otherwise load and start
+  if (!getActiveProfile()) {
+    openProfileModal();
+  } else {
+    loadActiveProfileData();
+    updateCurrentPlayerPill();
+    refreshTopRecords();
+    askNextQuestion();
+  }
 
   formEl.addEventListener('submit', handleSubmitAnswer);
   nextBtnEl.addEventListener('click', handleNext);
 
-  // Allow Enter to continue from feedback modal
-  feedbackModalEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+  // Allow Enter to continue from feedback modal (global)
+  document.addEventListener('keydown', (e) => {
+    if (isFeedbackOpen && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
       handleNext();
     }
@@ -411,6 +618,33 @@ function init() {
 
   closeReportBtnEl.addEventListener('click', () => {
     closeModal(endModalEl);
+  });
+
+  changePlayerBtnEl.addEventListener('click', () => {
+    openProfileModal();
+  });
+
+  profileStartBtnEl.addEventListener('click', () => {
+    const name = profileNameInputEl.value.trim();
+    if (!name) return;
+    switchToProfile(name);
+    closeModal(profileModalEl);
+  });
+
+  profileNameInputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      profileStartBtnEl.click();
+    }
+  });
+
+  leaderboardBtnEl.addEventListener('click', () => {
+    buildLeaderboardRows();
+    openModal(leaderboardModalEl);
+  });
+
+  closeLeaderboardBtnEl.addEventListener('click', () => {
+    closeModal(leaderboardModalEl);
   });
 }
 

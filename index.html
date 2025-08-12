@@ -13,11 +13,18 @@
   <body>
     <div class="app">
       <header class="app__header">
-        <div class="branding">
-          <div class="logo" aria-hidden="true">✨</div>
-          <div class="title">
-            <h1>Math Magic</h1>
-            <p class="subtitle">Multiplication Flashcards (0–10)</p>
+        <div class="header-left">
+          <div class="branding">
+            <div class="logo" aria-hidden="true">✨</div>
+            <div class="title">
+              <h1>Math Magic</h1>
+              <p class="subtitle">Multiplication Flashcards (0–10)</p>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn--ghost" id="change-player-btn">Change Player</button>
+            <button class="btn btn--ghost" id="leaderboard-btn">Leaderboard</button>
+            <div class="player-pill" id="current-player">Player: —</div>
           </div>
         </div>
 
@@ -92,7 +99,7 @@
         <div class="modal__content">
           <h2 id="feedback-title">Nice!</h2>
           <p id="feedback-message">You did it!</p>
-          <button class="btn btn--primary" id="next-btn" autofocus>Next</button>
+          <button class="btn btn--primary" id="next-btn">Next</button>
         </div>
       </div>
     </div>
@@ -112,6 +119,48 @@
           <div class="modal__actions">
             <button class="btn" id="close-report-btn">Close</button>
             <button class="btn btn--primary" id="play-again-btn">Play Again</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile Select Modal -->
+    <div class="modal" id="profile-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+      <div class="modal__dialog">
+        <div class="modal__content">
+          <h2 id="profile-title">Who's playing?</h2>
+          <div class="profile-form">
+            <input type="text" id="profile-name-input" class="input" placeholder="Type your name" aria-label="Player name" />
+            <button class="btn btn--primary" id="profile-start-btn">Start</button>
+          </div>
+          <div class="recent-profiles">
+            <h3>Recent players</h3>
+            <div id="recent-profiles" class="chips"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaderboard Modal -->
+    <div class="modal" id="leaderboard-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="leaderboard-title">
+      <div class="modal__dialog">
+        <div class="modal__content">
+          <h2 id="leaderboard-title">Leaderboard 🏆</h2>
+          <div class="leaderboard">
+            <table class="table" id="leaderboard-table" aria-label="Leaderboard table">
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th>Best Streak</th>
+                  <th>Best Correct %</th>
+                  <th>Best Avg Time</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="modal__actions">
+            <button class="btn" id="close-leaderboard-btn">Close</button>
           </div>
         </div>
       </div>

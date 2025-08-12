@@ -39,6 +39,18 @@ body {
   padding: 18px 24px;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .branding {
   display: flex;
   align-items: center;
@@ -175,6 +187,52 @@ body {
   background: var(--primary-strong);
 }
 
+.btn--ghost {
+  background: transparent;
+  color: var(--primary-strong);
+}
+
+.player-pill {
+  background: #ffffffaa;
+  backdrop-filter: blur(6px);
+  border: 1px solid #e7ebf3;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid #e9edf3;
+  border-radius: 12px;
+  font-size: 16px;
+  outline: none;
+}
+
+.profile-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chips .chip {
+  background: #f1f5ff;
+  border: 1px solid #e0e7ff;
+  color: var(--primary-strong);
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .progress {
   margin-top: 14px;
   color: var(--muted);
@@ -271,6 +329,27 @@ body {
 
 .modal--error .modal__content h2 {
   color: var(--danger);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th, .table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.leaderboard {
+  max-height: 50vh;
+  overflow: auto;
 }
 
 /* Small screens */
