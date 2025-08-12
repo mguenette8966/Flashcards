@@ -507,34 +507,26 @@ function updateCurrentPlayerPill() {
 function pickNextQuestionKey() {
   if (askedThisGame.size >= GAME_LENGTH) return null;
 
-  // Consume one scheduled missed around the 3rd question of this game
+  // Inject one scheduled missed around the 3rd question
   if (askedThisGame.size === 2 && lastMissedKeys.length > 0) {
     const k = lastMissedKeys.shift();
     saveActiveProfileData();
     if (!askedThisGame.has(k)) return k;
   }
 
-  // Unmastered first: pick first not yet used this game (no rotation)
-  if (unmasteredQueue.length > 0) {
-    for (let i = 0; i < unmasteredQueue.length; i += 1) {
-      const k = unmasteredQueue[i];
-      if (!askedThisGame.has(k)) {
-        return k;
-      }
-    }
+  // Unmastered first: random among not-yet-used this game
+  const unmasteredCandidates = (unmasteredQueue || []).filter((k) => !askedThisGame.has(k));
+  if (unmasteredCandidates.length > 0) {
+    return unmasteredCandidates[Math.floor(Math.random() * unmasteredCandidates.length)];
   }
 
-  // Mastered cycle: pick first not yet used this game
-  if (cycleQueue.length > 0) {
-    for (let i = 0; i < cycleQueue.length; i += 1) {
-      const k = cycleQueue[i];
-      if (!askedThisGame.has(k)) {
-        return k;
-      }
-    }
+  // Mastered cycle: random among not-yet-used this game
+  const masteredCandidates = (cycleQueue || []).filter((k) => !askedThisGame.has(k));
+  if (masteredCandidates.length > 0) {
+    return masteredCandidates[Math.floor(Math.random() * masteredCandidates.length)];
   }
 
-  // Fallback
+  // Fallback: any remaining not used this game
   const remaining = ALL_FACTS
     .map(({ a, b }) => factKey(a, b))
     .filter((k) => !askedThisGame.has(k));
@@ -647,7 +639,10 @@ function handleSubmitAnswer(event) {
     checkAndAwardAchievements();
   }
 
-  // Always show feedback; decide next action via the Next button
+  // Prevent re-submission of the same question
+  currentQuestion = null;
+
+  // Decide next via Next button
   if (askedThisGame.size >= GAME_LENGTH) {
     nextBtnEl.dataset.nextAction = 'end';
     nextBtnEl.textContent = 'See Report';
