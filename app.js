@@ -28,6 +28,16 @@ function factKey(a, b) {
   return `${a}x${b}`;
 }
 
+function parseKey(key) {
+  const m = /^([0-9]+)x([0-9]+)$/.exec(key || '');
+  if (!m) return null;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  if (a < 0 || a > 10 || b < 0 || b > 10) return null;
+  return { a, b };
+}
+
 function shuffle(array) {
   for (let i = array.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -154,26 +164,34 @@ let unmasteredQueue = [];
 let globalStreak = 0; // carries across games
 let totalGamesPlayed = 0;
 
+function recomputeQueuesFromStats() {
+  const allKeys = ALL_FACTS.map(({ a, b }) => factKey(a, b));
+  const mastered = [];
+  const unmastered = [];
+  for (const k of allKeys) {
+    const s = factStatsByKey[k];
+    if (s && s.correct > 0) mastered.push(k); else unmastered.push(k);
+  }
+  cycleQueue = Array.from(new Set(mastered));
+  unmasteredQueue = Array.from(new Set(unmastered));
+  // Sanitize lastMissedKeys to valid keys
+  lastMissedKeys = (lastMissedKeys || []).filter((k) => parseKey(k));
+  saveActiveProfileData();
+}
+
 function loadActiveProfileData() {
   const profile = getActiveProfile();
   if (!profile) return;
   factStatsByKey = profile.factStatsByKey || {};
-  cycleQueue = profile.cycleQueue || [];
-  lastMissedKeys = profile.lastMissedKeys || [];
+  cycleQueue = Array.isArray(profile.cycleQueue) ? profile.cycleQueue : [];
+  lastMissedKeys = Array.isArray(profile.lastMissedKeys) ? profile.lastMissedKeys : [];
   bestRecords = profile.bestRecords || { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null };
   previousGame = profile.previousGame || { percent: 0, avgTimeSec: null, maxStreak: 0 };
-  if (!Array.isArray(profile.unmasteredQueue)) {
-    profile.unmasteredQueue = ALL_FACTS
-      .map(({ a, b }) => factKey(a, b))
-      .filter((k) => !(factStatsByKey[k] && factStatsByKey[k].correct > 0));
-  }
-  unmasteredQueue = profile.unmasteredQueue;
-  const masteredKeys = ALL_FACTS
-    .map(({ a, b }) => factKey(a, b))
-    .filter((k) => factStatsByKey[k] && factStatsByKey[k].correct > 0);
-  masteredKeys.forEach((k) => { if (!cycleQueue.includes(k)) cycleQueue.push(k); });
+  unmasteredQueue = Array.isArray(profile.unmasteredQueue) ? profile.unmasteredQueue : [];
   globalStreak = Number(profile.globalStreak || 0);
   totalGamesPlayed = Number(profile.totalGamesPlayed || 0);
+  // Always recompute queues from stats to repair any stale/corrupt data
+  recomputeQueuesFromStats();
 }
 
 function saveActiveProfileData() {
@@ -525,8 +543,9 @@ function pickNextQuestionKey() {
 }
 
 function keyToFact(key) {
-  const [aStr, bStr] = key.split('x');
-  return { a: Number(aStr), b: Number(bStr) };
+  const parsed = parseKey(key);
+  if (!parsed) return { a: 0, b: 0 };
+  return parsed;
 }
 
 function showQuestionByKey(key) {
@@ -679,8 +698,22 @@ function handleNext() {
 }
 
 function askNextQuestion() {
+  // Safety: if queues are empty in an unexpected way, recompute them
+  if (unmasteredQueue.length === 0 && cycleQueue.length === 0) {
+    recomputeQueuesFromStats();
+  }
   const key = pickNextQuestionKey();
   if (!key) {
+    // If no question could be picked and no unique answered yet, attempt repair and retry once
+    if (askedThisGame.size === 0) {
+      recomputeQueuesFromStats();
+      const retryKey = pickNextQuestionKey();
+      if (retryKey) {
+        showQuestionByKey(retryKey);
+        updateLiveStats();
+        return;
+      }
+    }
     showEndSummary();
     return;
   }
@@ -754,9 +787,10 @@ function resetGame() {
   questionStartTimeMs = null;
   askedThisGame.clear();
   missedThisGame.clear();
-  retryQueue.length = 0;
   updateLiveStats();
   refreshTopRecords();
+  // Recompute queues at the start of each game to keep flow healthy
+  recomputeQueuesFromStats();
 }
 
 function startNewGame() {
