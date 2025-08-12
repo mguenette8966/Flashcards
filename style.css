@@ -445,3 +445,58 @@ body {
   }
   .stat { min-width: 44%; }
 }
+
+.badges-tray {
+  position: fixed;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 50;
+}
+
+.badges-tray.active { display: flex; }
+
+.badge {
+  background: var(--card);
+  border: 2px solid #e9edf3;
+  box-shadow: var(--shadow);
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge .level {
+  background: var(--primary);
+  color: white;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.badge .label {
+  color: var(--text);
+}
+
+/* Achievement modal burst */
+.modal--achievement .achievement {
+  position: relative;
+  overflow: hidden;
+}
+
+.achievement__burst {
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(circle, rgba(255,199,0,0.8) 0%, rgba(255,85,0,0.6) 40%, rgba(255,0,0,0.2) 70%, rgba(255,255,255,0) 72%);
+  transform: scale(0);
+  animation: burst 700ms ease-out forwards;
+}
+
+@keyframes burst {
+  to { transform: scale(1); }
+}

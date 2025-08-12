@@ -71,6 +71,7 @@ function createEmptyProfile(name) {
     lastMissedKeys: [],
     bestRecords: { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null },
     previousGame: { percent: 0, avgTimeSec: null, maxStreak: 0 },
+    achievements: { levelsEarned: [] }, // e.g., [1,2,3] for 1x,2x,3x mastery of all
     createdAtMs: nowMs(),
     lastPlayedMs: nowMs()
   };
@@ -222,6 +223,7 @@ const changePlayerBtnEl = document.getElementById('change-player-btn');
 const leaderboardBtnEl = document.getElementById('leaderboard-btn');
 const currentPlayerEl = document.getElementById('current-player');
 const themeBtnEl = document.getElementById('theme-btn');
+const badgesTrayEl = document.getElementById('badges-tray');
 
 // Profile modal
 const profileModalEl = document.getElementById('profile-modal');
@@ -238,6 +240,138 @@ const closeLeaderboardBtnEl = document.getElementById('close-leaderboard-btn');
 const themeModalEl = document.getElementById('theme-modal');
 const themeOptionsEl = document.getElementById('theme-options');
 const closeThemeBtnEl = document.getElementById('close-theme-btn');
+
+// Achievement modal
+const achievementModalEl = document.getElementById('achievement-modal');
+const achievementOkBtnEl = document.getElementById('achievement-ok-btn');
+const achievementTitleEl = document.getElementById('achievement-title');
+const achievementMessageEl = document.getElementById('achievement-message');
+
+// Sounds
+let audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+function playTone(freq, durationMs, type = 'sine', gainValue = 0.04) {
+  try {
+    ensureAudio();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = gainValue;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    setTimeout(() => { osc.stop(); }, durationMs);
+  } catch (_) { /* ignore */ }
+}
+
+function playSuccess() {
+  playTone(880, 80, 'triangle', 0.06);
+  setTimeout(() => playTone(1320, 80, 'triangle', 0.05), 80);
+}
+
+function playError() {
+  playTone(220, 120, 'sawtooth', 0.05);
+}
+
+function playNav() {
+  playTone(660, 40, 'square', 0.03);
+}
+
+function playExplosion() {
+  try {
+    ensureAudio();
+    const bufferSize = 2 * audioCtx.sampleRate;
+    const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+    }
+    const whiteNoise = audioCtx.createBufferSource();
+    whiteNoise.buffer = noiseBuffer;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1200, audioCtx.currentTime);
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.8);
+    whiteNoise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    whiteNoise.start();
+    whiteNoise.stop(audioCtx.currentTime + 0.9);
+  } catch (_) { /* ignore */ }
+}
+
+function updateBadgesTray() {
+  const profile = getActiveProfile();
+  if (!profile || !badgesTrayEl) return;
+  const levels = profile.achievements?.levelsEarned || [];
+  if (levels.length === 0) {
+    badgesTrayEl.classList.remove('active');
+    badgesTrayEl.innerHTML = '';
+    return;
+  }
+  badgesTrayEl.classList.add('active');
+  badgesTrayEl.innerHTML = '';
+  levels.forEach((lvl) => {
+    const d = document.createElement('div');
+    d.className = 'badge';
+    const lv = document.createElement('span');
+    lv.className = 'level';
+    lv.textContent = `${lvl}×`;
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = lvl === 1 ? 'All Facts Mastered' : `All Facts ${lvl}x`;
+    d.appendChild(lv);
+    d.appendChild(label);
+    badgesTrayEl.appendChild(d);
+  });
+}
+
+function checkAndAwardAchievements() {
+  const profile = getActiveProfile();
+  if (!profile) return;
+  // Count facts with at least n corrects
+  const countsByThreshold = new Map();
+  for (let n = 1; n <= 10; n += 1) countsByThreshold.set(n, 0);
+  for (const key of ALL_FACTS.map(({ a, b }) => factKey(a, b))) {
+    const s = factStatsByKey[key];
+    const corr = s?.correct || 0;
+    for (let n = 1; n <= Math.min(corr, 10); n += 1) {
+      countsByThreshold.set(n, (countsByThreshold.get(n) || 0) + 1);
+    }
+  }
+  // Determine highest newly completed level
+  let earnedLevel = null;
+  for (let n = 1; n <= 10; n += 1) {
+    if (countsByThreshold.get(n) === 121 && !profile.achievements.levelsEarned.includes(n)) {
+      earnedLevel = n;
+    }
+  }
+  if (earnedLevel != null) {
+    profile.achievements.levelsEarned.push(earnedLevel);
+    profile.achievements.levelsEarned.sort((a, b) => a - b);
+    saveProfiles();
+    updateBadgesTray();
+    showAchievementModal(earnedLevel);
+  }
+}
+
+function showAchievementModal(level) {
+  achievementTitleEl.textContent = 'Achievement unlocked!';
+  achievementMessageEl.textContent = level === 1
+    ? 'You mastered all 121 facts! Incredible! 💥'
+    : `You mastered all 121 facts ${level} times! WOW! 💥`;
+  openModal(achievementModalEl, 'modal--success');
+  playExplosion();
+}
 
 // Theme management
 const THEMES = [
@@ -455,27 +589,32 @@ function handleSubmitAnswer(event) {
   saveActiveProfileData();
 
   if (isCorrect && !(stats.correct > 1)) {
-    // Just mastered for the first time
     if (!cycleQueue.includes(key)) {
       cycleQueue.push(key);
       saveActiveProfileData();
     }
   }
 
-  // Feedback modal
+  // Feedback modal and sounds
   if (isCorrect) {
     feedbackTitleEl.textContent = randomPraise();
     feedbackMsgEl.textContent = `${a} × ${b} = ${correctAnswer}. High five! ✋`;
     openModal(feedbackModalEl, 'modal--success');
+    playSuccess();
   } else {
     feedbackTitleEl.textContent = randomEncouragement();
     feedbackMsgEl.textContent = `Oops, the answer is ${a} × ${b} = ${correctAnswer}. You can do it next time!`;
     openModal(feedbackModalEl, 'modal--error');
+    playError();
+  }
+
+  // Check achievements after updating stats
+  if (isCorrect) {
+    checkAndAwardAchievements();
   }
 
   updateLiveStats();
 
-  // If game complete, next goes to summary
   if (askedCount >= GAME_LENGTH) {
     nextBtnEl.dataset.nextAction = 'end';
   } else {
@@ -508,6 +647,7 @@ function handleNext() {
   } else {
     askNextQuestion();
   }
+  playNav();
 }
 
 function askNextQuestion() {
@@ -651,7 +791,6 @@ function buildLeaderboardRows() {
 
 function init() {
   // Always start with player selection on refresh
-  // Ignore persisted currentProfile at boot, but keep recent list
   currentProfileName = null;
   saveJSON(STORAGE_KEYS.currentProfile, null);
 
@@ -660,6 +799,7 @@ function init() {
   applyActiveProfileTheme();
   refreshTopRecords();
   updateLiveStats();
+  updateBadgesTray();
 
   // Show profile picker on load
   openProfileModal();
@@ -667,7 +807,6 @@ function init() {
   formEl.addEventListener('submit', handleSubmitAnswer);
   nextBtnEl.addEventListener('click', handleNext);
 
-  // Allow Enter to continue from feedback modal (global)
   document.addEventListener('keydown', (e) => {
     if (isFeedbackOpen && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
@@ -686,12 +825,14 @@ function init() {
 
   changePlayerBtnEl.addEventListener('click', () => {
     openProfileModal();
+    playNav();
   });
 
   profileStartBtnEl.addEventListener('click', () => {
     const name = profileNameInputEl.value.trim();
     if (!name) return;
     switchToProfile(name);
+    updateBadgesTray();
     closeModal(profileModalEl);
   });
 
@@ -705,6 +846,7 @@ function init() {
   leaderboardBtnEl.addEventListener('click', () => {
     buildLeaderboardRows();
     openModal(leaderboardModalEl);
+    playNav();
   });
 
   closeLeaderboardBtnEl.addEventListener('click', () => {
@@ -713,10 +855,15 @@ function init() {
 
   themeBtnEl.addEventListener('click', () => {
     openThemeModal();
+    playNav();
   });
 
   closeThemeBtnEl.addEventListener('click', () => {
     closeModal(themeModalEl);
+  });
+
+  achievementOkBtnEl.addEventListener('click', () => {
+    closeModal(achievementModalEl);
   });
 }
 

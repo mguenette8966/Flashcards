@@ -94,6 +94,9 @@
       </footer>
     </div>
 
+    <!-- Badges Tray (hidden until first badge) -->
+    <aside class="badges-tray" id="badges-tray" aria-label="Achievements"></aside>
+
     <!-- Feedback Modal -->
     <div class="modal" id="feedback-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
       <div class="modal__dialog">
@@ -176,6 +179,18 @@
           <div class="modal__actions">
             <button class="btn" id="close-theme-btn">Close</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Achievement Modal -->
+    <div class="modal modal--achievement" id="achievement-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="achievement-title">
+      <div class="modal__dialog">
+        <div class="modal__content achievement">
+          <div class="achievement__burst" aria-hidden="true"></div>
+          <h2 id="achievement-title">Achievement unlocked!</h2>
+          <p id="achievement-message">You mastered all 121 facts! 💥</p>
+          <button class="btn btn--primary" id="achievement-ok-btn">Wow!</button>
         </div>
       </div>
     </div>
