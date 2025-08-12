@@ -24,6 +24,7 @@
           <div class="header-actions">
             <button class="btn btn--ghost" id="change-player-btn">Change Player</button>
             <button class="btn btn--ghost" id="leaderboard-btn">Leaderboard</button>
+            <button class="btn btn--ghost" id="theme-btn">Theme</button>
             <div class="player-pill" id="current-player">Player: —</div>
           </div>
         </div>
@@ -161,6 +162,19 @@
           </div>
           <div class="modal__actions">
             <button class="btn" id="close-leaderboard-btn">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Theme Modal -->
+    <div class="modal" id="theme-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="theme-title">
+      <div class="modal__dialog">
+        <div class="modal__content">
+          <h2 id="theme-title">Choose a Theme 🎨</h2>
+          <div id="theme-options" class="swatches"></div>
+          <div class="modal__actions">
+            <button class="btn" id="close-theme-btn">Close</button>
           </div>
         </div>
       </div>

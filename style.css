@@ -1,3 +1,4 @@
+/* THEME VARIABLES */
 :root {
   --bg: radial-gradient(1250px 650px at 10% -10%, #ffe6f7 0%, #e8f4ff 30%, #ffffff 60%);
   --text: #1f2a44;
@@ -9,6 +10,90 @@
   --card: #ffffff;
   --shadow: 0 30px 60px rgba(0, 0, 0, 0.08);
   --radius: 18px;
+}
+
+/* Blue theme (default-like) */
+.theme-blue {
+  --bg: radial-gradient(1250px 650px at 10% -10%, #e6f0ff 0%, #f3f8ff 50%, #ffffff 80%);
+  --primary: #3d7eff;
+  --primary-strong: #2c6cf0;
+  --text: #112240;
+  --muted: #5a6b86;
+}
+
+/* Pink theme */
+.theme-pink {
+  --bg: radial-gradient(1200px 650px at -10% -10%, #ffe6f5 0%, #fff0fa 50%, #ffffff 80%);
+  --primary: #e0569a;
+  --primary-strong: #cc3f86;
+  --text: #351431;
+  --muted: #6f4a66;
+}
+
+/* Orange theme */
+.theme-orange {
+  --bg: radial-gradient(1200px 650px at -10% -10%, #fff1e6 0%, #fff7ef 50%, #ffffff 80%);
+  --primary: #ff8a34;
+  --primary-strong: #f5771c;
+  --text: #3a2712;
+  --muted: #7a5b40;
+}
+
+/* Mint theme */
+.theme-mint {
+  --bg: radial-gradient(1200px 650px at -10% -10%, #e6fff8 0%, #effffb 50%, #ffffff 80%);
+  --primary: #2dc5a3;
+  --primary-strong: #1eb892;
+  --text: #153a34;
+  --muted: #4f6d66;
+}
+
+/* Purple theme */
+.theme-purple {
+  --bg: radial-gradient(1200px 650px at -10% -10%, #efe6ff 0%, #f7f1ff 50%, #ffffff 80%);
+  --primary: #7a5af8;
+  --primary-strong: #6747f3;
+  --text: #1f1440;
+  --muted: #5b5386;
+}
+
+/* High-contrast theme */
+.theme-contrast {
+  --bg: radial-gradient(1200px 650px at -10% -10%, #fdfdfd 0%, #ffffff 50%, #ffffff 80%);
+  --primary: #111827;
+  --primary-strong: #0b1222;
+  --text: #0b1222;
+  --muted: #334155;
+}
+
+/* Swatches */
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.swatch {
+  display: grid;
+  grid-template-rows: 60px auto;
+  gap: 8px;
+  padding: 10px;
+  background: var(--card);
+  border: 1px solid #eaeef6;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.swatch .colors {
+  width: 100%;
+  height: 60px;
+  border-radius: 8px;
+}
+
+.swatch .label {
+  text-align: center;
+  font-weight: 700;
 }
 
 * {

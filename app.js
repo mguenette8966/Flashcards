@@ -65,6 +65,7 @@ let recentProfiles = loadJSON(STORAGE_KEYS.recentProfiles, []);
 function createEmptyProfile(name) {
   return {
     name,
+    theme: 'default',
     factStatsByKey: {},
     cycleQueue: [],
     lastMissedKeys: [],
@@ -134,6 +135,7 @@ function switchToProfile(name) {
   pushRecentProfile(trimmed);
   loadActiveProfileData();
   updateCurrentPlayerPill();
+  applyActiveProfileTheme();
   refreshTopRecords();
   startNewGame();
 }
@@ -219,6 +221,7 @@ const prevAvgTimeEl = document.getElementById('prev-avgtime');
 const changePlayerBtnEl = document.getElementById('change-player-btn');
 const leaderboardBtnEl = document.getElementById('leaderboard-btn');
 const currentPlayerEl = document.getElementById('current-player');
+const themeBtnEl = document.getElementById('theme-btn');
 
 // Profile modal
 const profileModalEl = document.getElementById('profile-modal');
@@ -230,6 +233,68 @@ const recentProfilesEl = document.getElementById('recent-profiles');
 const leaderboardModalEl = document.getElementById('leaderboard-modal');
 const leaderboardTableEl = document.getElementById('leaderboard-table');
 const closeLeaderboardBtnEl = document.getElementById('close-leaderboard-btn');
+
+// Theme modal
+const themeModalEl = document.getElementById('theme-modal');
+const themeOptionsEl = document.getElementById('theme-options');
+const closeThemeBtnEl = document.getElementById('close-theme-btn');
+
+// Theme management
+const THEMES = [
+  { id: 'default', label: 'Default', className: '', colors: ['#ffe6f7', '#e8f4ff', '#ffffff'], primary: '#6a5ae0' },
+  { id: 'orange', label: 'Orange', className: 'theme-orange', colors: ['#fff1e6', '#fff7ef', '#ffffff'], primary: '#ff8a34' },
+  { id: 'pink', label: 'Pink', className: 'theme-pink', colors: ['#ffe6f5', '#fff0fa', '#ffffff'], primary: '#e0569a' },
+  { id: 'blue', label: 'Blue', className: 'theme-blue', colors: ['#e6f0ff', '#f3f8ff', '#ffffff'], primary: '#3d7eff' },
+  { id: 'mint', label: 'Mint', className: 'theme-mint', colors: ['#e6fff8', '#effffb', '#ffffff'], primary: '#2dc5a3' },
+  { id: 'purple', label: 'Purple', className: 'theme-purple', colors: ['#efe6ff', '#f7f1ff', '#ffffff'], primary: '#7a5af8' },
+  { id: 'contrast', label: 'Bold', className: 'theme-contrast', colors: ['#fdfdfd', '#ffffff', '#ffffff'], primary: '#111827' }
+];
+
+function applyTheme(themeId) {
+  const { classList } = document.documentElement; // apply on <html>
+  // Remove all theme classes
+  THEMES.forEach((t) => {
+    if (t.className) classList.remove(t.className);
+  });
+  const theme = THEMES.find((t) => t.id === themeId) || THEMES[0];
+  if (theme.className) classList.add(theme.className);
+}
+
+function openThemeModal() {
+  themeOptionsEl.innerHTML = '';
+  THEMES.forEach((theme) => {
+    const sw = document.createElement('div');
+    sw.className = 'swatch';
+    const colors = document.createElement('div');
+    colors.className = 'colors';
+    colors.style.background = `linear-gradient(90deg, ${theme.colors.join(', ')})`;
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = theme.label;
+    sw.appendChild(colors);
+    sw.appendChild(label);
+    sw.addEventListener('click', () => {
+      const profile = getActiveProfile();
+      if (profile) {
+        profile.theme = theme.id;
+        saveProfiles();
+      }
+      applyTheme(theme.id);
+      closeModal(themeModalEl);
+    });
+    themeOptionsEl.appendChild(sw);
+  });
+  openModal(themeModalEl);
+}
+
+function applyActiveProfileTheme() {
+  const profile = getActiveProfile();
+  if (profile && profile.theme) {
+    applyTheme(profile.theme);
+  } else {
+    applyTheme('default');
+  }
+}
 
 function setText(el, text) { el.textContent = text; }
 
@@ -585,20 +650,19 @@ function buildLeaderboardRows() {
 }
 
 function init() {
+  // Always start with player selection on refresh
+  // Ignore persisted currentProfile at boot, but keep recent list
+  currentProfileName = null;
+  saveJSON(STORAGE_KEYS.currentProfile, null);
+
   maybeMigrateLegacyData();
   updateCurrentPlayerPill();
+  applyActiveProfileTheme();
   refreshTopRecords();
   updateLiveStats();
 
-  // If no active profile, ask first; otherwise load and start
-  if (!getActiveProfile()) {
-    openProfileModal();
-  } else {
-    loadActiveProfileData();
-    updateCurrentPlayerPill();
-    refreshTopRecords();
-    askNextQuestion();
-  }
+  // Show profile picker on load
+  openProfileModal();
 
   formEl.addEventListener('submit', handleSubmitAnswer);
   nextBtnEl.addEventListener('click', handleNext);
@@ -645,6 +709,14 @@ function init() {
 
   closeLeaderboardBtnEl.addEventListener('click', () => {
     closeModal(leaderboardModalEl);
+  });
+
+  themeBtnEl.addEventListener('click', () => {
+    openThemeModal();
+  });
+
+  closeThemeBtnEl.addEventListener('click', () => {
+    closeModal(themeModalEl);
   });
 }
 
