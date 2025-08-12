@@ -625,6 +625,17 @@ function handleSubmitAnswer(event) {
   updateLiveStats();
 
   if (isCorrect) {
+    checkAndAwardAchievements();
+  }
+
+  // If this was the final unique question, go straight to the end report
+  if (askedThisGame.size >= GAME_LENGTH) {
+    showEndSummary();
+    return;
+  }
+
+  // Otherwise, show feedback for this question
+  if (isCorrect) {
     feedbackTitleEl.textContent = randomPraise();
     feedbackMsgEl.textContent = `${a} × ${b} = ${correctAnswer}. High five! ✋`;
     openModal(feedbackModalEl, 'modal--success');
@@ -636,22 +647,8 @@ function handleSubmitAnswer(event) {
     playError();
   }
 
-  if (isCorrect) {
-    checkAndAwardAchievements();
-  }
-
-  // Decide next action
-  if (askedThisGame.size >= GAME_LENGTH) {
-    nextBtnEl.dataset.nextAction = 'end';
-    nextBtnEl.textContent = 'See Report';
-    // Auto-advance to summary to ensure the end-of-game report appears
-    setTimeout(() => {
-      if (isFeedbackOpen) handleNext();
-    }, 250);
-  } else {
-    nextBtnEl.dataset.nextAction = 'question';
-    nextBtnEl.textContent = 'Next';
-  }
+  nextBtnEl.dataset.nextAction = 'question';
+  nextBtnEl.textContent = 'Next';
 }
 
 const PRAISE = [
