@@ -57,6 +57,10 @@
               <span>Prev: <strong id="prev-avgtime">—</strong></span>
             </div>
           </div>
+          <div class="stat">
+            <div class="stat__label">Games</div>
+            <div class="stat__value" id="stat-games">0</div>
+          </div>
         </div>
       </header>
 
@@ -150,6 +154,12 @@
       <div class="modal__dialog">
         <div class="modal__content">
           <h2 id="leaderboard-title">Leaderboard 🏆</h2>
+          <div class="leaderboard-controls" id="leaderboard-controls" role="tablist" aria-label="Leaderboard metric">
+            <button class="seg-btn active" data-metric="percent" role="tab" aria-selected="true">Percent</button>
+            <button class="seg-btn" data-metric="streak" role="tab" aria-selected="false">Streak</button>
+            <button class="seg-btn" data-metric="avgtime" role="tab" aria-selected="false">Avg Time</button>
+            <button class="seg-btn" data-metric="games" role="tab" aria-selected="false">Games</button>
+          </div>
           <div class="leaderboard">
             <table class="table" id="leaderboard-table" aria-label="Leaderboard table">
               <thead>
@@ -158,6 +168,7 @@
                   <th>Best Streak</th>
                   <th>Best Correct %</th>
                   <th>Best Avg Time</th>
+                  <th>Total Games</th>
                 </tr>
               </thead>
               <tbody></tbody>

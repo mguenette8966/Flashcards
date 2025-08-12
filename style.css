@@ -500,3 +500,30 @@ body {
 @keyframes burst {
   to { transform: scale(1); }
 }
+
+/* Segmented controls for leaderboard */
+.leaderboard-controls {
+  display: inline-flex;
+  gap: 6px;
+  background: #f4f6fb;
+  border: 1px solid #e8edf6;
+  padding: 6px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+
+.seg-btn {
+  appearance: none;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--muted);
+  background: transparent;
+}
+
+.seg-btn.active {
+  background: var(--primary);
+  color: #fff;
+}

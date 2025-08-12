@@ -74,7 +74,9 @@ function createEmptyProfile(name) {
     previousGame: { percent: 0, avgTimeSec: null, maxStreak: 0 },
     achievements: { levelsEarned: [] }, // e.g., [1,2,3] for 1x,2x,3x mastery of all
     createdAtMs: nowMs(),
-    lastPlayedMs: nowMs()
+    lastPlayedMs: nowMs(),
+    globalStreak: 0, // carries across games
+    totalGamesPlayed: 0
   };
 }
 
@@ -149,6 +151,8 @@ let lastMissedKeys = [];
 let bestRecords = { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null };
 let previousGame = { percent: 0, avgTimeSec: null, maxStreak: 0 };
 let unmasteredQueue = [];
+let globalStreak = 0; // carries across games
+let totalGamesPlayed = 0;
 
 function loadActiveProfileData() {
   const profile = getActiveProfile();
@@ -158,18 +162,18 @@ function loadActiveProfileData() {
   lastMissedKeys = profile.lastMissedKeys || [];
   bestRecords = profile.bestRecords || { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null };
   previousGame = profile.previousGame || { percent: 0, avgTimeSec: null, maxStreak: 0 };
-  // Build unmasteredQueue if missing or stale
   if (!Array.isArray(profile.unmasteredQueue)) {
     profile.unmasteredQueue = ALL_FACTS
       .map(({ a, b }) => factKey(a, b))
       .filter((k) => !(factStatsByKey[k] && factStatsByKey[k].correct > 0));
   }
   unmasteredQueue = profile.unmasteredQueue;
-  // Ensure cycleQueue contains all mastered facts at least once
   const masteredKeys = ALL_FACTS
     .map(({ a, b }) => factKey(a, b))
     .filter((k) => factStatsByKey[k] && factStatsByKey[k].correct > 0);
   masteredKeys.forEach((k) => { if (!cycleQueue.includes(k)) cycleQueue.push(k); });
+  globalStreak = Number(profile.globalStreak || 0);
+  totalGamesPlayed = Number(profile.totalGamesPlayed || 0);
 }
 
 function saveActiveProfileData() {
@@ -181,6 +185,8 @@ function saveActiveProfileData() {
   profile.bestRecords = bestRecords;
   profile.previousGame = previousGame;
   profile.unmasteredQueue = unmasteredQueue;
+  profile.globalStreak = globalStreak;
+  profile.totalGamesPlayed = totalGamesPlayed;
   profile.lastPlayedMs = nowMs();
   saveProfiles();
 }
@@ -208,6 +214,7 @@ const factorBEl = document.getElementById('factor-b');
 const percentEl = document.getElementById('stat-percent');
 const streakEl = document.getElementById('stat-streak');
 const avgTimeEl = document.getElementById('stat-avgtime');
+const gamesEl = document.getElementById('stat-games');
 const progressEl = document.getElementById('progress');
 const tipsEl = document.getElementById('tips');
 
@@ -456,9 +463,10 @@ function updateLiveStats() {
   const percent = askedCount > 0 ? (100 * (correctCount / askedCount)) : 0;
   const avgTimeSec = askedCount > 0 ? Math.round(totalAnswerTimeMs / askedCount / 1000) : 0;
 
-  setText(streakEl, `${currentStreak}`);
+  setText(streakEl, `${globalStreak}`);
   setText(percentEl, formatPercent(percent));
   setText(avgTimeEl, `${avgTimeSec}s`);
+  gamesEl && setText(gamesEl, `${totalGamesPlayed}`);
   const displayCount = Math.min(askedThisGame.size + (currentQuestion ? 1 : 0), GAME_LENGTH);
   setText(progressEl, `Question ${displayCount} / ${GAME_LENGTH}`);
 }
@@ -479,22 +487,18 @@ function updateCurrentPlayerPill() {
 }
 
 function pickNextQuestionKey() {
-  // 0) Retry incorrect immediately until correct
-  if (retryQueue.length > 0) {
-    return retryQueue[0];
-  }
-
-  // Stop after 20 unique questions in this game
   if (askedThisGame.size >= GAME_LENGTH) return null;
 
-  // 1) Prioritize last missed from previous game (unique only)
-  for (const key of lastMissedKeys) {
-    if (!askedThisGame.has(key)) return key;
+  // If we have scheduled misses for next game, do not force them this game
+
+  // 1) If lastMissedKeys exist, place one around the 3rd spot of this game (index 2)
+  if (askedThisGame.size === 2 && lastMissedKeys.length > 0) {
+    const k = lastMissedKeys[0];
+    if (!askedThisGame.has(k)) return k;
   }
 
-  // 2) Take next unmastered fact without repeating this game
+  // 2) Unmastered first
   if (unmasteredQueue.length > 0) {
-    // rotate until we find one not used this game, or give up after full pass
     const len = unmasteredQueue.length;
     for (let i = 0; i < len; i += 1) {
       const k = unmasteredQueue[0];
@@ -506,7 +510,7 @@ function pickNextQuestionKey() {
     }
   }
 
-  // 3) Rotate through mastered facts
+  // 3) Mastered cycle
   if (cycleQueue.length > 0) {
     const len = cycleQueue.length;
     for (let i = 0; i < len; i += 1) {
@@ -519,7 +523,7 @@ function pickNextQuestionKey() {
     }
   }
 
-  // 4) Fallback any remaining not asked this game
+  // 4) Fallback
   const remaining = ALL_FACTS
     .map(({ a, b }) => factKey(a, b))
     .filter((k) => !askedThisGame.has(k));
@@ -582,13 +586,10 @@ function closeModal(modalEl) {
 
 function handleSubmitAnswer(event) {
   event.preventDefault();
-  if (isFeedbackOpen || modalOpenCount > 0) return; // prevent double submit
+  if (isFeedbackOpen || modalOpenCount > 0) return;
   if (!currentQuestion) return;
   const raw = answerInputEl.value.trim();
-  if (raw === '') {
-    answerInputEl.focus();
-    return;
-  }
+  if (raw === '') { answerInputEl.focus(); return; }
   const userValue = Number(raw);
   if (!Number.isFinite(userValue)) return;
 
@@ -599,10 +600,7 @@ function handleSubmitAnswer(event) {
   const correctAnswer = a * b;
   const isCorrect = userValue === correctAnswer;
 
-  // Update attempt stats
   askedCount += 1;
-
-  // Track unique per game on first attempt only
   if (!askedThisGame.has(key)) askedThisGame.add(key);
 
   const stats = factStatsByKey[key] || { correct: 0, wrong: 0, lastSeenMs: 0 };
@@ -610,34 +608,26 @@ function handleSubmitAnswer(event) {
   if (isCorrect) {
     stats.correct += 1;
     correctCount += 1;
+    globalStreak += 1;
     currentStreak += 1;
+    if (globalStreak > (bestRecords.bestStreak || 0)) bestRecords.bestStreak = globalStreak;
     if (currentStreak > maxStreak) maxStreak = currentStreak;
 
-    // If this was being retried, remove from retryQueue
-    if (retryQueue[0] === key) retryQueue.shift();
-
-    // If first time mastered, move from unmastered to mastered queue
+    // First time mastered -> move from unmastered to mastered
     if (stats.correct === 1) {
-      // remove from unmasteredQueue
       const idx = unmasteredQueue.indexOf(key);
       if (idx !== -1) unmasteredQueue.splice(idx, 1);
-      // add to mastered cycle if not present
       if (!cycleQueue.includes(key)) cycleQueue.push(key);
     }
   } else {
     stats.wrong += 1;
     currentStreak = 0;
+    globalStreak = 0; // reset global streak on any miss
     missedThisGame.add(key);
-    // Queue immediate retry if not already queued
-    if (retryQueue[0] !== key) {
-      // Put at front to retry next
-      retryQueue.unshift(key);
-    }
   }
   factStatsByKey[key] = stats;
   saveActiveProfileData();
 
-  // Feedback modal and sounds
   if (isCorrect) {
     feedbackTitleEl.textContent = randomPraise();
     feedbackMsgEl.textContent = `${a} × ${b} = ${correctAnswer}. High five! ✋`;
@@ -650,15 +640,13 @@ function handleSubmitAnswer(event) {
     playError();
   }
 
-  // Check achievements after updating stats
   if (isCorrect) {
     checkAndAwardAchievements();
   }
 
   updateLiveStats();
 
-  // Decide next action: end only if 20 unique reached and no retries pending
-  if (askedThisGame.size >= GAME_LENGTH && retryQueue.length === 0) {
+  if (askedThisGame.size >= GAME_LENGTH) {
     nextBtnEl.dataset.nextAction = 'end';
   } else {
     nextBtnEl.dataset.nextAction = 'question';
@@ -704,22 +692,20 @@ function askNextQuestion() {
 }
 
 function showEndSummary() {
-  // Compute final stats
   const percent = askedCount > 0 ? (100 * (correctCount / askedCount)) : 0;
   const avgTimeSec = askedCount > 0 ? Math.round(totalAnswerTimeMs / askedCount / 1000) : 0;
 
-  // Update bests
   if (maxStreak > (bestRecords.bestStreak ?? 0)) bestRecords.bestStreak = maxStreak;
   if (percent > (bestRecords.bestPercent ?? 0)) bestRecords.bestPercent = percent;
   if (avgTimeSec > 0 && (bestRecords.bestAvgTimeSec == null || avgTimeSec < bestRecords.bestAvgTimeSec)) {
     bestRecords.bestAvgTimeSec = avgTimeSec;
   }
-  // Save previous game to profile as well
   previousGame = { percent, avgTimeSec, maxStreak };
-  saveActiveProfileData();
+  totalGamesPlayed += 1;
 
-  // Save last missed for next run prioritization
-  lastMissedKeys = Array.from(missedThisGame);
+  // Schedule missed for next game (only unique list, capped at e.g. 10)
+  lastMissedKeys = Array.from(missedThisGame).slice(0, 10);
+
   saveActiveProfileData();
 
   // Build summary content
@@ -796,38 +782,52 @@ function openProfileModal() {
   setTimeout(() => { try { profileNameInputEl.focus(); } catch (_) {} }, 0);
 }
 
-function buildLeaderboardRows() {
+function buildLeaderboardRows(metric = 'percent') {
   const tbody = leaderboardTableEl.querySelector('tbody');
   tbody.innerHTML = '';
   const rows = Object.values(profilesByName).map((p) => ({
     name: p.name,
-    best: p.bestRecords || { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null }
+    best: p.bestRecords || { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null },
+    totalGames: Number(p.totalGamesPlayed || 0)
   }));
   rows.sort((a, b) => {
-    const ap = a.best.bestPercent || 0;
-    const bp = b.best.bestPercent || 0;
-    if (bp !== ap) return bp - ap;
-    const as = a.best.bestStreak || 0;
-    const bs = b.best.bestStreak || 0;
-    if (bs !== as) return bs - as;
-    const at = a.best.bestAvgTimeSec == null ? Infinity : a.best.bestAvgTimeSec;
-    const bt = b.best.bestAvgTimeSec == null ? Infinity : b.best.bestAvgTimeSec;
-    return at - bt;
+    if (metric === 'percent') {
+      const ap = a.best.bestPercent || 0;
+      const bp = b.best.bestPercent || 0;
+      return bp - ap;
+    }
+    if (metric === 'streak') {
+      const as = a.best.bestStreak || 0;
+      const bs = b.best.bestStreak || 0;
+      return bs - as;
+    }
+    if (metric === 'avgtime') {
+      const at = a.best.bestAvgTimeSec == null ? Infinity : a.best.bestAvgTimeSec;
+      const bt = b.best.bestAvgTimeSec == null ? Infinity : b.best.bestAvgTimeSec;
+      return at - bt;
+    }
+    if (metric === 'games') {
+      return (b.totalGames || 0) - (a.totalGames || 0);
+    }
+    return 0;
   });
-  rows.forEach(({ name, best }) => {
+  rows.forEach(({ name, best, totalGames }) => {
     const tr = document.createElement('tr');
     const tdName = document.createElement('td');
     const tdStreak = document.createElement('td');
     const tdPercent = document.createElement('td');
     const tdAvg = document.createElement('td');
+    const tdGames = document.createElement('td');
     tdName.textContent = name;
     tdStreak.textContent = `${best.bestStreak ?? 0}`;
     tdPercent.textContent = `${Math.round(best.bestPercent ?? 0)}%`;
     tdAvg.textContent = best.bestAvgTimeSec != null ? `${best.bestAvgTimeSec}s` : '—';
+    tdGames.textContent = `${totalGames || 0}`;
     tr.appendChild(tdName);
     tr.appendChild(tdStreak);
     tr.appendChild(tdPercent);
     tr.appendChild(tdAvg);
+    tr.appendChild(tdGames);
     tbody.appendChild(tr);
   });
 }
@@ -887,9 +887,19 @@ function init() {
   });
 
   leaderboardBtnEl.addEventListener('click', () => {
-    buildLeaderboardRows();
+    // Default metric percent
+    buildLeaderboardRows('percent');
     openModal(leaderboardModalEl);
     playNav();
+  });
+  const lbControls = document.getElementById('leaderboard-controls');
+  lbControls.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-metric]');
+    if (!btn) return;
+    lbControls.querySelectorAll('.seg-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    const metric = btn.getAttribute('data-metric');
+    buildLeaderboardRows(metric);
   });
 
   closeLeaderboardBtnEl.addEventListener('click', () => {
