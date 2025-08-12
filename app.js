@@ -489,41 +489,34 @@ function updateCurrentPlayerPill() {
 function pickNextQuestionKey() {
   if (askedThisGame.size >= GAME_LENGTH) return null;
 
-  // If we have scheduled misses for next game, do not force them this game
-
-  // 1) If lastMissedKeys exist, place one around the 3rd spot of this game (index 2)
+  // Consume one scheduled missed around the 3rd question of this game
   if (askedThisGame.size === 2 && lastMissedKeys.length > 0) {
-    const k = lastMissedKeys[0];
+    const k = lastMissedKeys.shift();
+    saveActiveProfileData();
     if (!askedThisGame.has(k)) return k;
   }
 
-  // 2) Unmastered first
+  // Unmastered first: pick first not yet used this game (no rotation)
   if (unmasteredQueue.length > 0) {
-    const len = unmasteredQueue.length;
-    for (let i = 0; i < len; i += 1) {
-      const k = unmasteredQueue[0];
-      unmasteredQueue.push(unmasteredQueue.shift());
+    for (let i = 0; i < unmasteredQueue.length; i += 1) {
+      const k = unmasteredQueue[i];
       if (!askedThisGame.has(k)) {
-        saveActiveProfileData();
         return k;
       }
     }
   }
 
-  // 3) Mastered cycle
+  // Mastered cycle: pick first not yet used this game
   if (cycleQueue.length > 0) {
-    const len = cycleQueue.length;
-    for (let i = 0; i < len; i += 1) {
-      const k = cycleQueue[0];
-      cycleQueue.push(cycleQueue.shift());
+    for (let i = 0; i < cycleQueue.length; i += 1) {
+      const k = cycleQueue[i];
       if (!askedThisGame.has(k)) {
-        saveActiveProfileData();
         return k;
       }
     }
   }
 
-  // 4) Fallback
+  // Fallback
   const remaining = ALL_FACTS
     .map(({ a, b }) => factKey(a, b))
     .filter((k) => !askedThisGame.has(k));
@@ -628,6 +621,9 @@ function handleSubmitAnswer(event) {
   factStatsByKey[key] = stats;
   saveActiveProfileData();
 
+  // Update stats immediately so streak shows right away
+  updateLiveStats();
+
   if (isCorrect) {
     feedbackTitleEl.textContent = randomPraise();
     feedbackMsgEl.textContent = `${a} × ${b} = ${correctAnswer}. High five! ✋`;
@@ -644,8 +640,7 @@ function handleSubmitAnswer(event) {
     checkAndAwardAchievements();
   }
 
-  updateLiveStats();
-
+  // Decide next action
   if (askedThisGame.size >= GAME_LENGTH) {
     nextBtnEl.dataset.nextAction = 'end';
   } else {
@@ -703,7 +698,10 @@ function showEndSummary() {
   previousGame = { percent, avgTimeSec, maxStreak };
   totalGamesPlayed += 1;
 
-  // Schedule missed for next game (only unique list, capped at e.g. 10)
+  // Re-check achievements at end (in case threshold crossed on last Q)
+  checkAndAwardAchievements();
+
+  // Schedule missed for next game (cap 10)
   lastMissedKeys = Array.from(missedThisGame).slice(0, 10);
 
   saveActiveProfileData();
