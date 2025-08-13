@@ -384,7 +384,6 @@ function updateBadgesTray() {
 function checkAndAwardAchievements() {
   const profile = getActiveProfile();
   if (!profile) return;
-  // Count facts with at least n corrects
   const countsByThreshold = new Map();
   for (let n = 1; n <= 10; n += 1) countsByThreshold.set(n, 0);
   for (const key of ALL_FACTS.map(({ a, b }) => factKey(a, b))) {
@@ -394,7 +393,7 @@ function checkAndAwardAchievements() {
       countsByThreshold.set(n, (countsByThreshold.get(n) || 0) + 1);
     }
   }
-  // Determine highest newly completed level
+  // Award highest newly completed level
   let earnedLevel = null;
   for (let n = 1; n <= 10; n += 1) {
     if (countsByThreshold.get(n) === 121 && !profile.achievements.levelsEarned.includes(n)) {
@@ -404,6 +403,13 @@ function checkAndAwardAchievements() {
   if (earnedLevel != null) {
     profile.achievements.levelsEarned.push(earnedLevel);
     profile.achievements.levelsEarned.sort((a, b) => a - b);
+    // After awarding, reset mastery counts to start the next round toward the next badge
+    for (const key of Object.keys(factStatsByKey)) {
+      const s = factStatsByKey[key];
+      if (s) { s.correct = 0; s.wrong = 0; }
+    }
+    // Rebuild queues: everything becomes unmastered again
+    recomputeQueuesFromStats();
     saveProfiles();
     updateBadgesTray();
     showAchievementModal(earnedLevel);
@@ -827,49 +833,44 @@ function buildLeaderboardRows(metric = 'percent') {
   tbody.innerHTML = '';
   const rows = Object.values(profilesByName).map((p) => ({
     name: p.name,
-    best: p.bestRecords || { bestStreak: 0, bestPercent: 0, bestAvgTimeSec: null },
-    totalGames: Number(p.totalGamesPlayed || 0)
+    percent: Math.round((p.bestRecords?.bestPercent || 0)),
+    streak: p.bestRecords?.bestStreak || 0,
+    avgtime: p.bestRecords?.bestAvgTimeSec == null ? Infinity : p.bestRecords.bestAvgTimeSec,
+    games: Number(p.totalGamesPlayed || 0)
   }));
-  rows.sort((a, b) => {
-    if (metric === 'percent') {
-      const ap = a.best.bestPercent || 0;
-      const bp = b.best.bestPercent || 0;
-      return bp - ap;
+
+  let sorter;
+  let valueLabel = 'Value';
+  let displayValue = (r) => `${r.percent}%`;
+  if (metric === 'streak') { sorter = (a,b)=> (b.streak - a.streak); valueLabel = 'Best Streak'; displayValue=(r)=> `${r.streak}`; }
+  else if (metric === 'avgtime') { sorter = (a,b)=> (a.avgtime - b.avgtime); valueLabel='Best Avg Time'; displayValue=(r)=> (r.avgtime===Infinity?'—':`${r.avgtime}s`); }
+  else if (metric === 'games') { sorter = (a,b)=> (b.games - a.games); valueLabel='Games'; displayValue=(r)=> `${r.games}`; }
+  else { sorter = (a,b)=> (b.percent - a.percent); valueLabel='Best %'; displayValue=(r)=> `${r.percent}%`; }
+
+  rows.sort(sorter);
+
+  // Tie-aware ranks
+  let lastVal = null; let rank = 0; let index = 0;
+  const getComparable = (r) => (metric==='streak'?r.streak: metric==='avgtime'?r.avgtime: metric==='games'?r.games: r.percent);
+
+  rows.forEach((r) => {
+    const val = getComparable(r);
+    index += 1;
+    if (lastVal === null || val !== lastVal) {
+      rank = index;
+      lastVal = val;
     }
-    if (metric === 'streak') {
-      const as = a.best.bestStreak || 0;
-      const bs = b.best.bestStreak || 0;
-      return bs - as;
-    }
-    if (metric === 'avgtime') {
-      const at = a.best.bestAvgTimeSec == null ? Infinity : a.best.bestAvgTimeSec;
-      const bt = b.best.bestAvgTimeSec == null ? Infinity : b.best.bestAvgTimeSec;
-      return at - bt;
-    }
-    if (metric === 'games') {
-      return (b.totalGames || 0) - (a.totalGames || 0);
-    }
-    return 0;
-  });
-  rows.forEach(({ name, best, totalGames }) => {
     const tr = document.createElement('tr');
-    const tdName = document.createElement('td');
-    const tdStreak = document.createElement('td');
-    const tdPercent = document.createElement('td');
-    const tdAvg = document.createElement('td');
-    const tdGames = document.createElement('td');
-    tdName.textContent = name;
-    tdStreak.textContent = `${best.bestStreak ?? 0}`;
-    tdPercent.textContent = `${Math.round(best.bestPercent ?? 0)}%`;
-    tdAvg.textContent = best.bestAvgTimeSec != null ? `${best.bestAvgTimeSec}s` : '—';
-    tdGames.textContent = `${totalGames || 0}`;
-    tr.appendChild(tdName);
-    tr.appendChild(tdStreak);
-    tr.appendChild(tdPercent);
-    tr.appendChild(tdAvg);
-    tr.appendChild(tdGames);
+    const tdRank = document.createElement('td'); tdRank.textContent = `${rank}`;
+    const tdName = document.createElement('td'); tdName.textContent = r.name;
+    const tdVal = document.createElement('td'); tdVal.textContent = displayValue(r);
+    tr.appendChild(tdRank); tr.appendChild(tdName); tr.appendChild(tdVal);
     tbody.appendChild(tr);
   });
+
+  // Update header label
+  const ths = leaderboardTableEl.querySelectorAll('thead th');
+  if (ths && ths[2]) ths[2].textContent = valueLabel;
 }
 
 function init() {
@@ -974,3 +975,26 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// Master reset button with password
+const masterResetBtnEl = document.getElementById('master-reset-btn');
+if (masterResetBtnEl) {
+  masterResetBtnEl.addEventListener('click', () => {
+    const pwd = prompt('Enter admin password to reset mastery and achievements for this profile:');
+    if (pwd !== 'math1234') return;
+    const profile = getActiveProfile();
+    if (!profile) return;
+    // Clear mastery stats and achievements (keep theme and totals)
+    for (const key of Object.keys(factStatsByKey)) {
+      const s = factStatsByKey[key];
+      if (s) { s.correct = 0; s.wrong = 0; }
+    }
+    profile.achievements = { levelsEarned: [] };
+    recomputeQueuesFromStats();
+    saveProfiles();
+    updateBadgesTray();
+    alert('Profile reset! Start playing to earn achievements again.');
+    resetGame();
+    askNextQuestion();
+  });
+}

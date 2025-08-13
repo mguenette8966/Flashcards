@@ -277,6 +277,10 @@ body {
   color: var(--primary-strong);
 }
 
+.btn--ghost#master-reset-btn {
+  color: #e11d48;
+}
+
 .player-pill {
   background: #ffffffaa;
   backdrop-filter: blur(6px);
@@ -544,4 +548,12 @@ body {
 .seg-btn.active {
   background: var(--primary);
   color: #fff;
+}
+
+.table th:nth-child(1), .table td:nth-child(1) {
+  width: 64px;
+}
+
+.table td:nth-child(3) {
+  font-weight: 800;
 }
