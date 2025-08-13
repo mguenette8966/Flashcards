@@ -348,15 +348,16 @@ body {
   justify-content: center;
   background: rgba(0, 0, 0, 0.35);
   padding: 18px;
+  z-index: 1000;
 }
+
+.modal.modal--achievement { z-index: 2000; }
 
 .modal[aria-hidden="false"] {
   display: flex;
 }
 
-.modal__dialog {
-  width: min(560px, 92vw);
-}
+.modal__dialog { position: relative; z-index: 1001; }
 
 .modal__content {
   background: var(--card);
