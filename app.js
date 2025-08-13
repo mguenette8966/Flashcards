@@ -164,6 +164,8 @@ let previousGame = { percent: 0, avgTimeSec: null, maxStreak: 0 };
 let unmasteredQueue = [];
 let globalStreak = 0; // carries across games
 let totalGamesPlayed = 0;
+let justAwardedLevel = null;
+let pendingAfterAchievement = null; // 'end' | 'question' | null
 
 function recomputeQueuesFromStats() {
   const allKeys = ALL_FACTS.map(({ a, b }) => factKey(a, b));
@@ -383,7 +385,7 @@ function updateBadgesTray() {
 
 function checkAndAwardAchievements() {
   const profile = getActiveProfile();
-  if (!profile) return;
+  if (!profile) return false;
   const countsByThreshold = new Map();
   for (let n = 1; n <= 10; n += 1) countsByThreshold.set(n, 0);
   for (const key of ALL_FACTS.map(({ a, b }) => factKey(a, b))) {
@@ -393,7 +395,6 @@ function checkAndAwardAchievements() {
       countsByThreshold.set(n, (countsByThreshold.get(n) || 0) + 1);
     }
   }
-  // Award highest newly completed level
   let earnedLevel = null;
   for (let n = 1; n <= 10; n += 1) {
     if (countsByThreshold.get(n) === 121 && !profile.achievements.levelsEarned.includes(n)) {
@@ -403,17 +404,20 @@ function checkAndAwardAchievements() {
   if (earnedLevel != null) {
     profile.achievements.levelsEarned.push(earnedLevel);
     profile.achievements.levelsEarned.sort((a, b) => a - b);
-    // After awarding, reset mastery counts to start the next round toward the next badge
+    // After awarding, reset mastery counts to start next tier
     for (const key of Object.keys(factStatsByKey)) {
       const s = factStatsByKey[key];
       if (s) { s.correct = 0; s.wrong = 0; }
     }
-    // Rebuild queues: everything becomes unmastered again
     recomputeQueuesFromStats();
-    saveProfiles();
+    // Persist full active profile state (not just profiles map)
+    saveActiveProfileData();
     updateBadgesTray();
+    justAwardedLevel = earnedLevel;
     showAchievementModal(earnedLevel);
+    return true;
   }
+  return false;
 }
 
 function showAchievementModal(level) {
@@ -631,7 +635,6 @@ function handleSubmitAnswer(event) {
     if (globalStreak > (bestRecords.bestStreak || 0)) bestRecords.bestStreak = globalStreak;
     if (currentStreak > maxStreak) maxStreak = currentStreak;
 
-    // First time mastered -> move from unmastered to mastered
     if (stats.correct === 1) {
       const idx = unmasteredQueue.indexOf(key);
       if (idx !== -1) unmasteredQueue.splice(idx, 1);
@@ -640,23 +643,23 @@ function handleSubmitAnswer(event) {
   } else {
     stats.wrong += 1;
     currentStreak = 0;
-    globalStreak = 0; // reset global streak on any miss
+    globalStreak = 0;
     missedThisGame.add(key);
   }
   factStatsByKey[key] = stats;
   saveActiveProfileData();
 
-  // Update stats immediately so streak shows right away
   updateLiveStats();
-
-  if (isCorrect) {
-    checkAndAwardAchievements();
-  }
 
   // Prevent re-submission of the same question
   currentQuestion = null;
 
-  // Decide next via Next button
+  // If achievement awarded, show only the achievement modal and decide next step
+  if (isCorrect && checkAndAwardAchievements()) {
+    pendingAfterAchievement = (askedThisGame.size >= GAME_LENGTH) ? 'end' : 'question';
+    return;
+  }
+
   if (askedThisGame.size >= GAME_LENGTH) {
     nextBtnEl.dataset.nextAction = 'end';
     nextBtnEl.textContent = 'See Report';
@@ -903,7 +906,7 @@ function init() {
     achievementModalEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        closeModal(achievementModalEl);
+        achievementOkBtnEl.click();
       }
     });
   }
@@ -971,6 +974,15 @@ function init() {
 
   achievementOkBtnEl.addEventListener('click', () => {
     closeModal(achievementModalEl);
+    // Continue the flow depending on pending action
+    const action = pendingAfterAchievement;
+    pendingAfterAchievement = null;
+    justAwardedLevel = null;
+    if (action === 'end') {
+      showEndSummary();
+    } else {
+      askNextQuestion();
+    }
   });
 }
 
