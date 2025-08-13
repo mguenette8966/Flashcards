@@ -386,37 +386,35 @@ function updateBadgesTray() {
 function checkAndAwardAchievements() {
   const profile = getActiveProfile();
   if (!profile) return false;
-  const countsByThreshold = new Map();
-  for (let n = 1; n <= 10; n += 1) countsByThreshold.set(n, 0);
-  for (const key of ALL_FACTS.map(({ a, b }) => factKey(a, b))) {
-    const s = factStatsByKey[key];
-    const corr = s?.correct || 0;
-    for (let n = 1; n <= Math.min(corr, 10); n += 1) {
-      countsByThreshold.set(n, (countsByThreshold.get(n) || 0) + 1);
+
+  // Count how many facts have been answered correctly at least once
+  let completed = 0;
+  for (const { a, b } of ALL_FACTS) {
+    const k = factKey(a, b);
+    const s = factStatsByKey[k];
+    if ((s?.correct || 0) >= 1) completed += 1;
+  }
+
+  if (completed === 121) {
+    const levels = profile.achievements?.levelsEarned || [];
+    const nextLevel = (levels.length === 0) ? 1 : Math.max(...levels) + 1;
+    if (!levels.includes(nextLevel)) {
+      profile.achievements.levelsEarned.push(nextLevel);
+      profile.achievements.levelsEarned.sort((a, b) => a - b);
+      // Reset mastery counts to start tracking the next cycle
+      for (const key of Object.keys(factStatsByKey)) {
+        const s = factStatsByKey[key];
+        if (s) { s.correct = 0; s.wrong = 0; }
+      }
+      recomputeQueuesFromStats();
+      saveActiveProfileData();
+      updateBadgesTray();
+      justAwardedLevel = nextLevel;
+      showAchievementModal(nextLevel);
+      return true;
     }
   }
-  let earnedLevel = null;
-  for (let n = 1; n <= 10; n += 1) {
-    if (countsByThreshold.get(n) === 121 && !profile.achievements.levelsEarned.includes(n)) {
-      earnedLevel = n;
-    }
-  }
-  if (earnedLevel != null) {
-    profile.achievements.levelsEarned.push(earnedLevel);
-    profile.achievements.levelsEarned.sort((a, b) => a - b);
-    // After awarding, reset mastery counts to start next tier
-    for (const key of Object.keys(factStatsByKey)) {
-      const s = factStatsByKey[key];
-      if (s) { s.correct = 0; s.wrong = 0; }
-    }
-    recomputeQueuesFromStats();
-    // Persist full active profile state (not just profiles map)
-    saveActiveProfileData();
-    updateBadgesTray();
-    justAwardedLevel = earnedLevel;
-    showAchievementModal(earnedLevel);
-    return true;
-  }
+
   return false;
 }
 
