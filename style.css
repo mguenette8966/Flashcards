@@ -518,6 +518,13 @@ body {
   background: radial-gradient(circle, rgba(255,199,0,0.8) 0%, rgba(255,85,0,0.6) 40%, rgba(255,0,0,0.2) 70%, rgba(255,255,255,0) 72%);
   transform: scale(0);
   animation: burst 700ms ease-out forwards;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.modal--achievement .achievement > :not(.achievement__burst) {
+  position: relative;
+  z-index: 1;
 }
 
 @keyframes burst {
